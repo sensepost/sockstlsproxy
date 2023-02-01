@@ -1,8 +1,6 @@
 ﻿using StreamExtended;
 using StreamExtended.Network;
 using System;
-using System.IO;
-using System.Linq;
 using System.Net;
 using System.Net.Security;
 using System.Net.Sockets;
@@ -11,73 +9,48 @@ using System.Security.Cryptography.X509Certificates;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
-using System.Xml.Linq;
 
 namespace Proxy
 {
     internal class SocksProxy
     {
-        private readonly int _bindPort;
-        private readonly bool _useClientCert;
-        private readonly X509Certificate _clientCertificate;
         private readonly IPAddress _bindAddress;
+        private readonly ushort _bindPort;
+        private readonly bool _useTls;
+        private readonly X509Certificate _clientCertificate;
         private readonly CancellationTokenSource _tokenSource;
         private readonly X509Certificate _serverCertificate;
 
-        public SocksProxy(IPAddress bindAddress = null, int bindPort = 1080, bool useClientCert = false, string clientCertName = null, string serverCertName = "MySslSocketCertificate")
+        public SocksProxy(string bindAddress = "0.0.0.0", ushort bindPort = 1080, bool useTls = false, string clientCertName = null, string serverCertName = "MySslSocketCertificate")
         {
             _bindPort = bindPort;
-            _bindAddress = bindAddress ?? IPAddress.Any;
+            try
+            {
+                _bindAddress = IPAddress.Parse(bindAddress);
+            } catch(Exception ex)
+            {
+                Console.WriteLine($"[*] Invalid IP Address Given, falling back to {IPAddress.Any}");
+                _bindAddress = IPAddress.Any;
+            }
             _tokenSource = new CancellationTokenSource();
-            _serverCertificate = getServerCert(serverCertName);
-            _useClientCert = useClientCert;
+            _serverCertificate = CertificateUtil.GetOrCreateServerCert(serverCertName);
+            _useTls = useTls;
 
-            if (_useClientCert)
+            if (_useTls)
             {
-                _clientCertificate = getClientCert(clientCertName);
+                _clientCertificate = CertificateUtil.GetClientCert(clientCertName);
             }
         }
 
-        private static X509Certificate getServerCert(string serverCertName)
-        {
-            X509Store store = new X509Store(StoreName.My, StoreLocation.CurrentUser);
-            store.Open(OpenFlags.ReadOnly);
 
-            X509Certificate2 foundCertificate = null;
-            foreach (X509Certificate2 currentCertificate
-               in store.Certificates)
+        private static ISocksProxy GetSocksProxy(int version)
+        {
+            if(version == 4)
             {
-                if (currentCertificate.IssuerName.Name
-                   != null && currentCertificate.IssuerName.
-                   Name.Equals("CN=" + serverCertName))
-                {
-                    foundCertificate = currentCertificate;
-                    break;
-                }
+                return new Socks4Proxy();
             }
 
-            return foundCertificate;
-        }
-
-        private static X509Certificate getClientCert(string name)
-        {
-            X509Store store = new X509Store(StoreName.My, StoreLocation.CurrentUser);
-            store.Open(OpenFlags.ReadOnly);
-
-            X509Certificate2 foundCertificate = null;
-            foreach (X509Certificate2 currentCertificate
-               in store.Certificates)
-            {
-                if (currentCertificate.IssuerName.Name
-                   != null && currentCertificate.SubjectName.
-                   Name.StartsWith("CN=" + name))
-                {
-                    foundCertificate = currentCertificate;
-                    break;
-                }
-            }
-
-            return foundCertificate;
+            return new Socks5Proxy();
         }
 
         public async Task Start()
@@ -133,43 +106,14 @@ namespace Proxy
             // read the first byte, which is the SOCKS version
             var version = Convert.ToInt32(responseData[0]);
 
-            if (version == 4)
-            {
-                await SendConnectReply(client, true);
+            ISocksProxy socksProxy = GetSocksProxy(version);
 
-                Socks4Handler request = await Socks4Handler.FromBytes(data);
-
-                Console.WriteLine("[+] Connecting to the destination >> " + request.DestinationAddress + "/" + request.DestinationPort);
-
-                // connect to destination
-                var destination = new TcpClient(request.DestinationAddress.ToString(), request.DestinationPort);
-
-                var clientSslHelloInfo = await SslTools.PeekClientHello(clientStream, bufferPool);
-                await ProcessData(client, clientStream, destination, request.Hostname, request.DestinationAddress.ToString(), _tokenSource, clientSslHelloInfo);
-            }
-            else
-            {
-                Console.WriteLine("[-] SOCKS5 Incoming...");
-                await SendSocks5AuthReply(client);
-
-                var _data = new Byte[8192];
-                await clientStream.ReadAsync(_data, 0, _data.Length);
-
-                Socks5Handler request = await Socks5Handler.FromBytes(_data);
-
-                Console.WriteLine("[+] Connecting to the destination >> " + request.DestinationAddress + "/" + request.DestinationPort);
-
-                // connect to destination
-                var destination = new TcpClient(request.DestinationAddress.ToString(), request.DestinationPort);
-
-                await SendSocks5ConnectReply(client, true, request);
-
-                var clientSslHelloInfo = await SslTools.PeekClientHello(clientStream, bufferPool);
-                await ProcessData(client, clientStream, destination, null, request.DestinationAddress.ToString(), _tokenSource, clientSslHelloInfo);
-            }
+            ConnectionInfos infos = await socksProxy.Connect(client, data, clientStream, bufferPool);
+            TcpClient destination = new TcpClient(infos.DestinationAddress, infos.DestinationPort);
+            await ProcessData(client, clientStream, destination, infos.Hostname, _tokenSource, infos.ClientHelloInfo);
         }
 
-        private async Task ProcessData(TcpClient client, CustomBufferedStream clientStream, TcpClient destination, string hostname, string destinationAddress, CancellationTokenSource tokenSource, ClientHelloInfo clientSslHelloInfo)
+        private async Task ProcessData(TcpClient client, CustomBufferedStream clientStream, TcpClient destination, string hostname, CancellationTokenSource tokenSource, ClientHelloInfo clientSslHelloInfo)
         {
             SslStream sslStream = null;
             if (clientSslHelloInfo != null)
@@ -203,7 +147,7 @@ namespace Proxy
                 {
                     // Ideally the SNI should be read from the TLS Client Hello; and be used here
                     var sniHostName = clientSslHelloInfo.Extensions["server_name"].Data;
-                    if (!_useClientCert)
+                    if (!_useTls)
                     {
                         sslDestinationStream.AuthenticateAsClient(sniHostName);
                     }
@@ -321,82 +265,6 @@ namespace Proxy
             }
             clientStream.Close();
             client.Close();
-        }
-
-        private async Task SendConnectReply(TcpClient client, bool success)
-        {
-            var reply = new byte[]
-            {
-                0x00,
-                success ? (byte)0x5a : (byte)0x5b,
-                0x00, 0x00,
-                0x00, 0x00, 0x00, 0x00
-            };
-
-            // Get a client stream for reading and writing. 
-            NetworkStream stream = client.GetStream();
-
-            // Send the message to the connected TcpServer. 
-            stream.Write(reply, 0, reply.Length);
-        }
-
-        private async Task SendSocks5AuthReply(TcpClient client)
-        {
-            // Establish auth methods that client selected = 0 - No Auth, 1 - GSAPPI, 2 - Username/Password
-            //var nmethods = (int)data[1];
-            //var methods = new ArrayList();
-            //for (int i = 0; i < nmethods; i++)
-            //{
-            //methods.Add((int)data[2 + i]);
-            //}
-
-            // Send auth selection reply 
-            // +----+--------+
-            // |VER | METHOD |
-            // +----+--------+
-            // | 1  | 1      |
-            // +----+--------+
-            var reply = new byte[]
-            {
-                    0x05, // VER = 05
-                    0x00, // 00 = No authentication
-            };
-
-            // Get a client stream for reading and writing. 
-            NetworkStream stream = client.GetStream();
-
-            // Send the message to the connected TcpServer. 
-            stream.Write(reply, 0, reply.Length);
-        }
-
-        private async Task SendSocks5ConnectReply(TcpClient client, bool success, Socks5Handler request)
-        {
-            // Send connect reply
-            // +----+-----+-------+------+----------+----------+
-            // | VER | REP | RSV | ATYP | BND.ADDR | BND.PORT |
-            // +----+-----+-------+------+----------+----------+
-            // | 1   | 1   | X'00' | 1  | Variable | 2        |
-            // +----+-----+-------+------+----------+----------+
-
-            var reply = new byte[]
-             {
-                0x05, // VER = 05
-                success ? (byte)0x00 : (byte)0x05, // 00 = success
-                0x00, // RSV
-                (byte)request.AddressType,
-                request.DestinationAddress.GetAddressBytes()[0],
-                request.DestinationAddress.GetAddressBytes()[1],
-                request.DestinationAddress.GetAddressBytes()[2],
-                request.DestinationAddress.GetAddressBytes()[3],
-                0x00,
-                (byte)request.DestinationPort
-             };
-
-            // Get a client stream for reading and writing. 
-            NetworkStream stream = client.GetStream();
-
-            // Send the message to the connected TcpServer. 
-            stream.Write(reply, 0, reply.Length);
         }
 
         public static bool DataAvailableClient(TcpClient client, CustomBufferedStream clientStream, ClientHelloInfo clientSslHelloInfo, CancellationTokenSource tokenSource)
