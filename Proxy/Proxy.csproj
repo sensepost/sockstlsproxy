@@ -53,6 +53,9 @@
     <Prefer32Bit>true</Prefer32Bit>
   </PropertyGroup>
   <ItemGroup>
+    <Reference Include="CommandLine, Version=2.9.1.0, Culture=neutral, PublicKeyToken=5a870481e358d379, processorArchitecture=MSIL">
+      <HintPath>..\packages\CommandLineParser.2.9.1\lib\net461\CommandLine.dll</HintPath>
+    </Reference>
     <Reference Include="StreamExtended, Version=1.0.201.0, Culture=neutral, PublicKeyToken=bbfa0f1d54f50043, processorArchitecture=MSIL">
       <HintPath>..\packages\StreamExtended.1.0.201\lib\net45\StreamExtended.dll</HintPath>
     </Reference>
@@ -66,10 +69,14 @@
     <Reference Include="System.Xml" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="CertificateUtil.cs" />
+    <Compile Include="ISocksProxy.cs" />
     <Compile Include="Program.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="Socks4\Socks4Handler.cs" />
+    <Compile Include="Socks4\Socks4Proxy.cs" />
     <Compile Include="Socks5\Socks5Handler.cs" />
+    <Compile Include="Socks5\Socks5Proxy.cs" />
     <Compile Include="SocksProxy.cs" />
   </ItemGroup>
   <ItemGroup>
