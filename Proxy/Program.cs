@@ -12,8 +12,8 @@ namespace Proxy
             public string Address { get; set; }
             [Option('p', "port", Default = (ushort)1080, HelpText = "Bind port")]
             public ushort Port { get; set; }
-            [Option("tls", Default = false, HelpText = "Use TLS")]
-            public bool UseTLS { get; set; } = false;
+            [Option("auth", Default = false, HelpText = "Use Client Certificate Authentication")]
+            public bool UseClientCertificate { get; set; } = false;
             [Option('c', "client-cert", Required = false, HelpText = "CN of Client Cert")]
             public string ClientCertName { get; set; }
             [Option('s', "socks-cert", Default = "MySslSocketCertificate", HelpText = "CN of Socks Proxy Cert")]
@@ -26,9 +26,9 @@ namespace Proxy
             CommandLine.Parser.Default.ParseArguments<Options>(args)
             .WithParsed(opts =>
             {
-                if (opts.UseTLS && string.IsNullOrEmpty(opts.ClientCertName))
+                if (opts.UseClientCertificate && string.IsNullOrEmpty(opts.ClientCertName))
                 {
-                    Console.WriteLine("CN of Client Cert (-c option) is required when using tls");
+                    Console.WriteLine("CN of Client Cert (-c option) is required when using client certificate authentication");
                     return;
                 }
                 options = opts;
@@ -45,7 +45,7 @@ namespace Proxy
             SocksProxy socksProxy = new SocksProxy(
                 options.Address,
                 options.Port,
-                options.UseTLS,
+                options.UseClientCertificate,
                 options.ClientCertName,
                 options.SocksCertName
             );

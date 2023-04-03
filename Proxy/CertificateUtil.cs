@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Net;
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 
@@ -30,13 +31,13 @@ namespace Proxy
             Console.WriteLine($"[*] Creating self-signed certificate {certName}");
             try
             {
-                ECDsa ecdsa = ECDsa.Create(); // generate asymmetric key pair
-                CertificateRequest req = new CertificateRequest("cn=" + certName, ecdsa, HashAlgorithmName.SHA256);
+                RSA key = RSA.Create(); // generate asymmetric key pair
+                CertificateRequest req = new CertificateRequest("cn=" + certName, key, HashAlgorithmName.SHA512, RSASignaturePadding.Pkcs1);
                 X509Certificate2 cert = req.CreateSelfSigned(DateTimeOffset.Now, DateTimeOffset.Now.AddYears(5));
 
                 if(!cert.HasPrivateKey)
                 {
-                    cert = cert.CopyWithPrivateKey(ecdsa);
+                    cert = cert.CopyWithPrivateKey(key);
                 }
 
                 var persistable = new X509Certificate2(cert.Export(X509ContentType.Pfx), "", X509KeyStorageFlags.PersistKeySet);

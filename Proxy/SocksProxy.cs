@@ -16,12 +16,12 @@ namespace Proxy
     {
         private readonly IPAddress _bindAddress;
         private readonly ushort _bindPort;
-        private readonly bool _useTls;
+        private readonly bool _useClientAuthentication;
         private readonly X509Certificate _clientCertificate;
         private readonly CancellationTokenSource _tokenSource;
         private readonly X509Certificate _serverCertificate;
 
-        public SocksProxy(string bindAddress = "0.0.0.0", ushort bindPort = 1080, bool useTls = false, string clientCertName = null, string serverCertName = "MySslSocketCertificate")
+        public SocksProxy(string bindAddress = "0.0.0.0", ushort bindPort = 1080, bool useClientAuthentication = false, string clientCertName = null, string serverCertName = "MySslSocketCertificate")
         {
             _bindPort = bindPort;
             try
@@ -34,9 +34,9 @@ namespace Proxy
             }
             _tokenSource = new CancellationTokenSource();
             _serverCertificate = CertificateUtil.GetOrCreateServerCert(serverCertName);
-            _useTls = useTls;
+            _useClientAuthentication = useClientAuthentication;
 
-            if (_useTls)
+            if (_useClientAuthentication)
             {
                 _clientCertificate = CertificateUtil.GetClientCert(clientCertName);
             }
@@ -147,7 +147,7 @@ namespace Proxy
                 {
                     // Ideally the SNI should be read from the TLS Client Hello; and be used here
                     var sniHostName = clientSslHelloInfo.Extensions["server_name"].Data;
-                    if (!_useTls)
+                    if (!_useClientAuthentication)
                     {
                         sslDestinationStream.AuthenticateAsClient(sniHostName);
                     }

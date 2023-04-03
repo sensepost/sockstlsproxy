@@ -40,11 +40,11 @@ PS C:\SocksTLSProxy\> .\Proxy.exe --help
 
   -p, --port           (Default: 1080) Bind port
 
-  --tls                (Default: false) Use TLS
+  --auth               (Default: false) Use client certificate authentication
 
   -c, --client-cert    CN of Client Cert
 
-  -s, --socks-cert     (Default: MySslSocketCertificate) CN of Socks Proxy Cert
+  -s, --socks-cert     (Default: MySslSocketCertificate) CN of SOCKS Proxy certificate
 
   --help               Display this help screen.
 
@@ -66,7 +66,7 @@ Makecert -r -pe -n "CN=MySslSocketCertificate" -b 01/01/2022 -e 01/01/2027 -sk e
 Lastly, the proxy requires the CN of the client SSL certificate (i.e. ```BadSSL Client Certificate```) that should be added to all HTTPS traffic. This will be highly-dependent on the target workstation and the certificate being targeted. The following serves as a complete example how the SOCKS TLS proxy could be invoked:
 
 ```powershell
-PS C:\SocksTLSProxy\> .\Proxy.exe -a 0.0.0.0 -p 1080 --tls -c "BadSSL Client Certificate" -s "MySslSocketCertificate"
+PS C:\SocksTLSProxy\> .\Proxy.exe -a 0.0.0.0 -p 1080 --auth -c "BadSSL Client Certificate" -s "MySslSocketCertificate"
 ```
 
 **Note: The proxy will only have access to the current user's context. As such, the client certificate needs to be available under Certificate - Current User -> Personal -> Certificates.**
